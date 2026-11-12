@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mô Phỏng Tỷ Lệ Vi Mô & Khả Năng Lọc 0.0024 µm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060b14;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass-card {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.6);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
+            color: #ffffff;
+            border-color: #38bdf8;
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.35);
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 25px rgba(6, 182, 212, 0.25);
+            border-color: rgba(6, 182, 212, 0.45);
+        }
+
+        .glow-rose {
+            box-shadow: 0 0 25px rgba(244, 63, 94, 0.2);
+            border-color: rgba(244, 63, 94, 0.4);
+        }
+
+        input[type="range"] {
+            accent-color: #0ea5e9;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500 selection:text-white">
+
+    <!-- Header Điều Hướng -->
+    <header class="border-b border-slate-800/90 bg-slate-950/90 sticky top-0 z-50 px-4 lg:px-8 py-3.5 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-700 flex items-center justify-center text-white shadow-lg shadow-cyan-500/20">
+                    <i class="fa-solid fa-magnifying-glass-chart text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base sm:text-lg text-slate-100 flex items-center gap-2">
+                        Phòng Thí Nghiệm So Sánh Tỷ Lệ Lọc Vi Mô
+                        <span class="hidden sm:inline-block text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">Chuẩn 0.0024 µm</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Trực quan hóa sự chênh lệch giữa chuẩn lọc thị trường và công nghệ 2.4 nanomet</p>
+                </div>
+            </div>
+
+            <!-- Chuyển Đổi 3 Chế Độ Mô Phỏng -->
+            <nav class="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs font-medium w-full md:w-auto justify-center">
+                <button onclick="switchMode('chamber')" id="nav-chamber" class="tab-btn active flex-1 md:flex-none px-3.5 py-2 rounded-lg transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-columns"></i> 1. Buồng Lọc Đối Đầu
+                </button>
+                <button onclick="switchMode('microscope')" id="nav-microscope" class="tab-btn flex-1 md:flex-none px-3.5 py-2 rounded-lg transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-microscope"></i> 2. Kính Hiển Vi Zoom
+                </button>
+                <button onclick="switchMode('metaphor')" id="nav-metaphor" class="tab-btn flex-1 md:flex-none px-3.5 py-2 rounded-lg transition-all flex items-center justify-center gap-2 text-slate-400 hover:text-slate-200">
+                    <i class="fa-solid fa-scale-unbalanced"></i> 3. Quy Đổi Đời Thường
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Nội Dung Chính -->
+    <main class="max-w-7xl mx-auto w-full p-4 lg:p-6 flex-1 flex flex-col gap-5">
+
+        <!-- ===================================================================== -->
+        <!-- CHẾ ĐỘ 1: BUỒNG THỬ NGHIỆM MÀNG LỌC ĐỐI ĐẦU (SPLIT-SCREEN CHAMBER)    -->
+        <!-- ===================================================================== -->
+        <section id="view-chamber" class="flex flex-col gap-5">
+            
+            <!-- Thanh chọn mức đối chiếu bên trái -->
+            <div class="glass-card p-4 rounded-2xl flex flex-col lg:flex-row items-center justify-between gap-4">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto">
+                    <span class="text-xs font-bold uppercase tracking-wider text-rose-400 flex items-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-sliders"></i> Chọn chuẩn máy thị trường (Bên Trái):
+                    </span>
+                    <div class="flex flex-wrap gap-1.5" id="market-selector">
+                        <button onclick="setMarketFilter(10, 'Bụi thô PM10 (10 µm)')" class="mkt-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" data-size="10">PM10 (10 µm)</button>
+                        <button onclick="setMarketFilter(2.5, 'Bụi mịn PM2.5 (2.5 µm)')" class="mkt-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" data-size="2.5">PM2.5 (2.5 µm)</button>
+                        <button onclick="setMarketFilter(0.3, 'HEPA tiêu chuẩn (0.3 µm)')" class="mkt-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white border border-rose-400 shadow-lg shadow-rose-500/20" data-size="0.3">HEPA thường (0.3 µm)</button>
+                        <button onclick="setMarketFilter(0.1, 'HEPA H13/H14 (0.1 µm)')" class="mkt-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" data-size="0.1">HEPA H13/H14 (0.1 µm)</button>
+                        <button onclick="setMarketFilter(0.03, 'Lọc cao cấp thị trường (0.03 µm)')" class="mkt-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700" data-size="0.03">Cao cấp (0.03 µm)</button>
+                    </div>
+                </div>
+
+                <!-- Highlight Chênh Lệch Tức Thời -->
+                <div class="flex items-center gap-3 bg-slate-950/90 px-4 py-2 rounded-xl border border-cyan-500/30 w-full lg:w-auto justify-between lg:justify-end">
+                    <span class="text-xs text-slate-400">Ngưỡng <strong class="text-cyan-400">0.0024 µm</strong> nhỏ hơn:</span>
+                    <span id="chamber-ratio-badge" class="text-base sm:text-lg font-extrabold mono text-cyan-400">125 LẦN</span>
+                </div>
+            </div>
+
+            <!-- Khung Canvas Chia Đôi Đối Đầu -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                
+                <!-- CỘT TRÁI: MÀNG LỌC THỊ TRƯỜNG -->
+                <div class="glass-card rounded-2xl overflow-hidden flex flex-col border border-rose-500/30 glow-rose">
+                    <div class="bg-rose-950/40 border-b border-rose-500/20 px-4 py-3 flex items-center justify-between">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-rose-400 block">Chuẩn Phổ Biến Thị Trường</span>
+                            <h2 id="left-chamber-title" class="text-sm font-bold text-slate-100">HEPA tiêu chuẩn (0.3 µm)</h2>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400 block">Hạt lọt vào phổi</span>
+                            <span id="leaked-counter" class="text-base font-extrabold mono text-rose-400">0 hạt</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[340px] bg-slate-950">
+                        <canvas id="canvasLeft"></canvas>
+                        <div class="absolute bottom-2.5 left-3 right-3 flex justify-between items-center text-[11px] bg-slate-900/85 px-3 py-1.5 rounded-lg border border-slate-800 pointer-events-none">
+                            <span class="text-slate-400">Khe lưới chặn: <strong id="left-mesh-label" class="text-rose-300 mono">≥ 0.3 µm</strong></span>
+                            <span class="text-rose-400 font-medium"><i class="fa-solid fa-triangle-exclamation"></i> Virus & Hạt nano xuyên thủng</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CỘT PHẢI: CÔNG NGHỆ 0.0024 MICROMET -->
+                <div class="glass-card rounded-2xl overflow-hidden flex flex-col border border-cyan-500/40 glow-cyan">
+                    <div class="bg-cyan-950/40 border-b border-cyan-500/20 px-4 py-3 flex items-center justify-between">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider text-cyan-400 block">Công Nghệ Lọc Siêu Vi Mô</span>
+                            <h2 class="text-sm font-bold text-slate-100">Chuẩn Atmosphere (0.0024 µm / 2.4 nm)</h2>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400 block">Hiệu suất chặn giữ</span>
+                            <span class="text-base font-extrabold mono text-emerald-400">99.99%</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[340px] bg-slate-950">
+                        <canvas id="canvasRight"></canvas>
+                        <div class="absolute bottom-2.5 left-3 right-3 flex justify-between items-center text-[11px] bg-slate-900/85 px-3 py-1.5 rounded-lg border border-slate-800 pointer-events-none">
+                            <span class="text-slate-400">Khe lưới chặn: <strong class="text-cyan-300 mono">≥ 0.0024 µm</strong></span>
+                            <span class="text-emerald-400 font-medium"><i class="fa-solid fa-shield-check"></i> Chặn đứng cả hạt 2.4 nanomet</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Bảng Chú Thích Các Loại Hạt Trong Buồng Thử -->
+            <div class="glass-card p-4 rounded-2xl grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+                <div class="flex items-center gap-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span class="w-4 h-4 rounded-full bg-amber-500 shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-slate-200">PM10 (10 µm)</div>
+                        <div class="text-[10px] text-slate-400">Bụi đường, phấn hoa</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span class="w-3.5 h-3.5 rounded-full bg-orange-400 shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-slate-200">PM2.5 (2.5 µm)</div>
+                        <div class="text-[10px] text-slate-400">Khói xe, khói bếp</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span class="w-3 h-3 rounded-full bg-yellow-300 shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-slate-200">0.3 µm (300 nm)</div>
+                        <div class="text-[10px] text-slate-400">Vi khuẩn, chuẩn HEPA</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span class="w-2.5 h-2.5 rounded-full bg-purple-400 shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-slate-200">0.1 µm (100 nm)</div>
+                        <div class="text-[10px] text-slate-400">Virus cúm, SARS-CoV-2</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                    <span class="w-2 h-2 rounded-full bg-rose-400 shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-slate-200">0.03 µm (30 nm)</div>
+                        <div class="text-[10px] text-slate-400">Virus nhỏ, khói thuốc</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2.5 bg-cyan-950/50 p-2.5 rounded-xl border border-cyan-500/40">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0"></span>
+                    <div>
+                        <div class="font-bold text-cyan-300">0.0024 µm</div>
+                        <div class="text-[10px] text-cyan-200/80">2.4 nm (Mức chặn tối đa)</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- CHẾ ĐỘ 2: KÍNH HIỂN VI QUANG HỌC ZOOM ĐA TẦNG (1x - 1000x)            -->
+        <!-- ===================================================================== -->
+        <section id="view-microscope" class="hidden flex-col gap-5">
+            <div class="glass-card p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="flex flex-col gap-1 w-full md:w-1/2">
+                    <div class="flex justify-between text-xs">
+                        <span class="font-bold text-cyan-400 uppercase tracking-wider"><i class="fa-solid fa-magnifying-glass-plus"></i> Độ Phóng Đại Kính Hiển Vi (Optical Zoom)</span>
+                        <span id="zoom-display" class="font-extrabold mono text-base text-white">10x</span>
+                    </div>
+                    <input type="range" id="zoom-slider" min="1" max="1000" value="10" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-400 mono">
+                        <span>1x (Nhìn Sợi tóc & PM10)</span>
+                        <span>50x (Nhìn PM2.5 & 0.3µm)</span>
+                        <span>250x (Nhìn 0.03µm)</span>
+                        <span>1000x (Thấy rõ 0.0024µm)</span>
+                    </div>
+                </div>
+
+                <!-- Các nút nhảy nhanh tới từng mốc -->
+                <div class="flex flex-wrap gap-1.5 justify-end w-full md:w-auto">
+                    <button onclick="setZoomPreset(2)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700">Mốc Sợi tóc vs PM10</button>
+                    <button onclick="setZoomPreset(25)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700">Mốc PM2.5 vs 0.3µm</button>
+                    <button onclick="setZoomPreset(180)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700">Mốc 0.03µm vs 0.0024µm</button>
+                    <button onclick="setZoomPreset(850)" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-lg shadow-cyan-500/20">Soi cận cảnh 0.0024µm</button>
+                </div>
+            </div>
+
+            <!-- Canvas Kính Hiển Vi -->
+            <div class="relative w-full h-[420px] rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl">
+                <canvas id="microscopeCanvas"></canvas>
+                <div id="microscope-caption" class="absolute top-4 left-4 right-4 md:right-auto max-w-lg bg-slate-900/90 backdrop-blur-md p-3.5 rounded-xl border border-slate-700 text-xs text-slate-200 leading-relaxed">
+                    Kéo thanh trượt độ phóng đại để phóng to thế giới vi hạt theo <strong>đúng tỷ lệ kích thước thật 100%</strong>. Bạn sẽ thấy khi hạt 0.3 µm hay 0.03 µm to như quả bóng, hạt 0.0024 µm mới lộ diện!
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- CHẾ ĐỘ 3: BẢNG QUY ĐỔI ẨN DỤ ĐỜI THƯỜNG & SO SÁNH BỘI SỐ              -->
+        <!-- ===================================================================== -->
+        <section id="view-metaphor" class="hidden flex-col gap-5">
+            <div class="glass-card p-5 rounded-2xl flex flex-col gap-5">
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-100">Đặt Lên Bàn Cân: Kích Thước Thị Trường vs Chuẩn 0.0024 µm</h2>
+                        <p class="text-xs text-slate-400">Chọn một thông số quảng cáo phổ biến trên thị trường để xem nó lớn hơn ngưỡng 0.0024 µm bao nhiêu lần</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2" id="metaphor-selector">
+                        <button onclick="selectMetaphor(10)" class="meta-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700" data-m="10">PM10 (10 µm)</button>
+                        <button onclick="selectMetaphor(2.5)" class="meta-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700" data-m="2.5">PM2.5 (2.5 µm)</button>
+                        <button onclick="selectMetaphor(0.3)" class="meta-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-600 text-white border border-cyan-400" data-m="0.3">HEPA 0.3 µm</button>
+                        <button onclick="selectMetaphor(0.1)" class="meta-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700" data-m="0.1">ULPA 0.1 µm</button>
+                        <button onclick="selectMetaphor(0.03)" class="meta-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700" data-m="0.03">Cao cấp 0.03 µm</button>
+                    </div>
+                </div>
+
+                <!-- Khu vực hiển thị trực quan hình học & Ẩn dụ -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                    
+                    <!-- Minh họa Hình Tròn Tỷ Lệ Thực -->
+                    <div class="lg:col-span-6 bg-slate-950 rounded-2xl border border-slate-800 p-6 flex flex-col items-center justify-center min-h-[300px] relative">
+                        <div class="flex items-center justify-around w-full gap-4">
+                            <!-- Vòng tròn đối thủ -->
+                            <div class="flex flex-col items-center gap-3">
+                                <div id="circle-market" class="rounded-full bg-gradient-to-tr from-rose-600 to-amber-500 shadow-lg shadow-rose-500/30 flex items-center justify-center text-white font-bold text-xs transition-all duration-500" style="width: 180px; height: 180px;">
+                                    0.3 µm
+                                </div>
+                                <span id="label-circle-market" class="text-xs font-semibold text-rose-400">Chuẩn HEPA (0.3 µm)</span>
+                            </div>
+
+                            <div class="text-slate-500 font-bold text-sm">VS</div>
+
+                            <!-- Vòng tròn 0.0024 -->
+                            <div class="flex flex-col items-center gap-3">
+                                <div class="w-[180px] h-[180px] flex items-center justify-center">
+                                    <div id="circle-0024" class="rounded-full bg-cyan-400 shadow-lg shadow-cyan-400/50 transition-all duration-500" style="width: 3px; height: 3px;"></div>
+                                </div>
+                                <span class="text-xs font-bold text-cyan-400">Chuẩn 0.0024 µm</span>
+                            </div>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-4 text-center">*Hai hình tròn trên được vẽ theo <strong>đúng tỷ lệ đường kính toán học</strong></p>
+                    </div>
+
+                    <!-- Thẻ Số Liệu & Hình Ảnh Ẩn Dụ Đời Sống -->
+                    <div class="lg:col-span-6 flex flex-col gap-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800">
+                                <span class="text-xs text-slate-400 block mb-1">Chênh lệch Đường Kính</span>
+                                <span id="stat-diameter" class="text-2xl sm:text-3xl font-extrabold mono text-cyan-400">125 lần</span>
+                                <span class="text-[11px] text-slate-400 block mt-1">Hạt 0.0024 µm nhỏ hơn</span>
+                            </div>
+                            <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800">
+                                <span class="text-xs text-slate-400 block mb-1">Chênh lệch Tiết Diện Lỗ Lọc</span>
+                                <span id="stat-area" class="text-2xl sm:text-3xl font-extrabold mono text-amber-400">15.625 lần</span>
+                                <span class="text-[11px] text-slate-400 block mt-1">Khe hở lưới rộng gấp</span>
+                            </div>
+                        </div>
+
+                        <!-- Box Ví Von Đời Thường -->
+                        <div class="bg-gradient-to-br from-cyan-950/50 to-slate-900 p-5 rounded-2xl border border-cyan-500/30 flex flex-col gap-2">
+                            <div class="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                                <i class="fa-solid fa-lightbulb text-amber-400"></i> Ví Von Đời Thường Cho Khách Hàng Dễ Hình Dung
+                            </div>
+                            <h3 id="metaphor-headline" class="text-base font-bold text-white mt-1">
+                                Giống như so sánh "Chiếc xe ô tô 4 chỗ" với "Một hạt đậu xanh"!
+                            </h3>
+                            <p id="metaphor-desc" class="text-xs text-slate-300 leading-relaxed">
+                                Màng lọc HEPA tiêu chuẩn (0.3 µm) thiết kế lưới chặn vừa đủ để giữ lại chiếc ô tô 4 chỗ (vi khuẩn/bụi mịn). Nhưng nếu có hàng triệu hạt đậu xanh (virus siêu nhỏ, khói độc kích thước 0.0024 µm) bay tới, chúng sẽ lọt thỏm qua khe lưới đó dễ dàng mà không chạm vào bất kỳ sợi lọc nào.
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Script Điều Khiển & Vẽ Mô Phỏng Canvas -->
+    <script>
+        // ==========================================
+        // 1. DỮ LIỆU KHOA HỌC & ẨN DỤ ĐỜI THƯỜNG
+        // ==========================================
+        const TARGET_SIZE = 0.0024; // Ngưỡng chuẩn siêu vi mô (micromet)
+
+        const metaphorData = {
+            10: {
+                name: "Bụi thô PM10 (10 µm)",
+                ratio: 4166,
+                headline: 'Giống như so sánh "Tòa nhà chung cư 12 tầng" với "Một viên bi ve"!',
+                desc: "Hạt bụi PM10 lớn gấp 4.166 lần ngưỡng 0.0024 µm. Một màng lọc chỉ chặn được bụi PM10 giống như lưới rào sân bóng đá: chỉ chặn được quả bóng rổ, còn bụi mịn PM2.5, vi khuẩn và virus bay xuyên qua như chỗ không người."
+            },
+            2.5: {
+                name: "Bụi mịn PM2.5 (2.5 µm)",
+                ratio: 1041,
+                headline: 'Giống như so sánh "Chiếc xe buýt 45 chỗ" với "Một viên bi ve"!',
+                desc: "Hạt bụi mịn PM2.5 lớn gấp 1.041 lần ngưỡng 0.0024 µm. Nếu màng lọc chỉ dừng ở mức lọc PM2.5, nó chỉ bắt được những 'chiếc xe buýt' bụi thô mịn, nhưng toàn bộ vi khuẩn, virus cúm và khói độc kích thước nano đều lọt thẳng vào phổi."
+            },
+            0.3: {
+                name: "HEPA tiêu chuẩn (0.3 µm)",
+                ratio: 125,
+                headline: 'Giống như so sánh "Chiếc xe ô tô 4 chỗ" với "Một hạt đậu xanh"!',
+                desc: "0.3 µm là chuẩn HEPA phổ biến trên thị trường (gấp 125 lần ngưỡng 0.0024 µm). Màng lọc này bắt tốt vi khuẩn và bụi mịn, nhưng đối với các hạt virus trần kích thước 0.02 - 0.1 µm hay đại phân tử độc hại, khe lưới này vẫn rộng gấp 15.625 lần về tiết diện!"
+            },
+            0.1: {
+                name: "HEPA H13/H14 - ULPA (0.1 µm)",
+                ratio: 41.6,
+                headline: 'Giống như so sánh "Quả bóng rổ" với "Hạt gạo"!',
+                desc: "0.1 µm (100 nanomet) là kích thước của virus SARS-CoV-2 và nhiều dòng máy lọc cao cấp lấy làm chuẩn. Tuy nhiên, ngưỡng 0.0024 µm (2.4 nanomet) vẫn còn nhỏ hơn tới gần 42 lần — đủ sức chặn cả những mảnh vỡ virus nhỏ nhất và các cụm phân tử khí ô nhiễm."
+            },
+            0.03: {
+                name: "Màng lọc cao cấp thị trường (0.03 µm)",
+                ratio: 12.5,
+                headline: 'Giống như so sánh "Quả bóng tennis" với "Đầu kim ghim"!',
+                desc: "Một số hãng cao cấp quảng cáo lọc được tới 0.03 µm (30 nanomet). Con số này nghe rất nhỏ, nhưng thực tế vẫn lớn gấp 12,5 lần về đường kính (và gấp 156 lần về diện tích lỗ hở) so với ngưỡng 0.0024 µm!"
+            }
+        };
+
+        // Danh sách 6 loại hạt tiêu biểu trong buồng thử nghiệm
+        const particleSpecs = [
+            { label: "PM10", size: 10, radiusPx: 11, color: "#f59e0b" },
+            { label: "PM2.5", size: 2.5, radiusPx: 8, color: "#fb923c" },
+            { label: "0.3µm", size: 0.3, radiusPx: 5.5, color: "#fde047" },
+            { label: "0.1µm", size: 0.1, radiusPx: 4, color: "#c084fc" },
+            { label: "0.03µm", size: 0.03, radiusPx: 3, color: "#fb7185" },
+            { label: "0.0024µm", size: 0.0024, radiusPx: 2, color: "#22d3ee" }
+        ];
+
+        // ==========================================
+        // 2. BIẾN TRẠNG THÁI & KHỞI TẠO CANVAS
+        // ==========================================
+        let activeTab = 'chamber';
+        let marketFilterSize = 0.3;
+        let leakedCount = 0;
+        let zoomLevel = 10;
+
+        const cLeft = document.getElementById('canvasLeft');
+        const ctxLeft = cLeft.getContext('2d');
+        const cRight = document.getElementById('canvasRight');
+        const ctxRight = cRight.getContext('2d');
+        const cMicro = document.getElementById('microscopeCanvas');
+        const ctxMicro = cMicro.getContext('2d');
+
+        let leftParticles = [];
+        let rightParticles = [];
+
+        function resizeCanvases() {
+            [cLeft, cRight, cMicro].forEach(canvas => {
+                if (!canvas || !canvas.parentElement) return;
+                const rect = canvas.parentElement.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    canvas.width = rect.width * window.devicePixelRatio;
+                    canvas.height = rect.height * window.devicePixelRatio;
+                    const ctx = canvas.getContext('2d');
+                    ctx.setTransform(1, 0, 0, 1, 0, 0);
+                    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                }
+            });
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        // ==========================================
+        // 3. ĐIỀU HƯỚNG TAB & CẬP NHẬT DỮ LIỆU
+        // ==========================================
+        function switchMode(mode) {
+            activeTab = mode;
+            ['chamber', 'microscope', 'metaphor'].forEach(m => {
+                const view = document.getElementById(`view-${m}`);
+                const nav = document.getElementById(`nav-${m}`);
+                if (m === mode) {
+                    view.classList.remove('hidden');
+                    view.classList.add('flex');
+                    nav.classList.add('active');
+                    nav.classList.remove('text-slate-400');
+                } else {
+                    view.classList.add('hidden');
+                    view.classList.remove('flex');
+                    nav.classList.remove('active');
+                    nav.classList.add('text-slate-400');
+                }
+            });
+            setTimeout(resizeCanvases, 20);
+        }
+
+        function setMarketFilter(size, title) {
+            marketFilterSize = size;
+            leakedCount = 0;
+            document.getElementById('leaked-counter').innerText = "0 hạt";
+            document.getElementById('left-chamber-title').innerText = title;
+            document.getElementById('left-mesh-label').innerText = `≥ ${size} µm`;
+
+            // Tính tỷ lệ chênh lệch
+            const ratio = Math.round((size / TARGET_SIZE) * 10) / 10;
+            document.getElementById('chamber-ratio-badge').innerText = `${ratio.toLocaleString('vi-VN')} LẦN`;
+
+            // Cập nhật trạng thái nút
+            document.querySelectorAll('.mkt-btn').forEach(btn => {
+                if (parseFloat(btn.dataset.size) === size) {
+                    btn.className = "mkt-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600 text-white border border-rose-400 shadow-lg shadow-rose-500/20";
+                } else {
+                    btn.className = "mkt-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700";
+                }
+            });
+
+            // Reset hạt để quan sát lại từ đầu
+            initChamberParticles();
+        }
+
+        // ==========================================
+        // 4. LOGIC MÔ PHỎNG BUỒNG LỌC ĐỐI ĐẦU (CHAMBER)
+        // ==========================================
+        class ChamberParticle {
+            constructor(isRightChamber) {
+                this.isRight = isRightChamber;
+                this.reset(true);
+            }
+
+            reset(randomX = false) {
+                const canvas = this.isRight ? cRight : cLeft;
+                const w = canvas.width / window.devicePixelRatio || 500;
+                const h = canvas.height / window.devicePixelRatio || 340;
+
+                const spec = particleSpecs[Math.floor(Math.random() * particleSpecs.length)];
+                this.label = spec.label;
+                this.size = spec.size;
+                this.radius = spec.radiusPx;
+                this.color = spec.color;
+
+                this.x = randomX ? Math.random() * (w * 0.45) : -15;
+                this.y = 30 + Math.random() * (h - 60);
+                this.vx = 1.6 + Math.random() * 1.4;
+                this.vy = (Math.random() - 0.5) * 0.7;
+                this.blocked = false;
+                this.alpha = 1;
+            }
+
+            update() {
+                const canvas = this.isRight ? cRight : cLeft;
+                const w = canvas.width / window.devicePixelRatio || 500;
+                const h = canvas.height / window.devicePixelRatio || 340;
+                const filterX = w * 0.52;
+
+                if (this.blocked) {
+                    this.alpha -= 0.015;
+                    if (this.alpha <= 0) this.reset(false);
+                    return;
+                }
+
+                // Chuyển động Brown nhẹ cho hạt siêu nhỏ
+                if (this.size <= 0.3) {
+                    this.y += (Math.random() - 0.5) * 1.6;
+                }
+
+                const prevX = this.x;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Kiểm tra khi chạm mặt màng lọc tại filterX
+                if (prevX < filterX && this.x >= filterX) {
+                    const threshold = this.isRight ? TARGET_SIZE : marketFilterSize;
+                    if (this.size >= threshold) {
+                        // Bị màng lọc chặn đứng
+                        this.x = filterX - this.radius - 1;
+                        this.blocked = true;
+                    } else {
+                        // Xuyên thủng qua khe lưới (nếu ở cột trái)
+                        if (!this.isRight) {
+                            leakedCount++;
+                            document.getElementById('leaked-counter').innerText = `${leakedCount} hạt`;
+                        }
+                    }
+                }
+
+                if (this.x > w + 20) {
+                    this.reset(false);
+                }
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 6;
+                ctx.fill();
+
+                // Hiển thị nhãn kích thước cho hạt lọt qua bên trái để khách hàng dễ thấy
+                if (!this.isRight && this.x > (cLeft.width / window.devicePixelRatio) * 0.55) {
+                    ctx.fillStyle = "#fda4af";
+                    ctx.font = "9px JetBrains Mono, monospace";
+                    ctx.fillText(this.label, this.x - 12, this.y - this.radius - 3);
+                }
+                ctx.restore();
+            }
+        }
+
+        function initChamberParticles() {
+            leftParticles = [];
+            rightParticles = [];
+            for (let i = 0; i < 65; i++) {
+                leftParticles.push(new ChamberParticle(false));
+                rightParticles.push(new ChamberParticle(true));
+            }
+        }
+
+        function drawChamberBackground(ctx, canvas, isRight) {
+            const w = canvas.width / window.devicePixelRatio;
+            const h = canvas.height / window.devicePixelRatio;
+            ctx.clearRect(0, 0, w, h);
+
+            const filterX = w * 0.52;
+
+            // Vùng không khí đầu vào (Trái)
+            ctx.fillStyle = "rgba(255, 255, 255, 0.015)";
+            ctx.fillRect(0, 0, filterX, h);
+
+            // Vùng sau màng lọc (Phổi / Phòng ngủ)
+            ctx.fillStyle = isRight ? "rgba(6, 182, 212, 0.04)" : "rgba(244, 63, 94, 0.04)";
+            ctx.fillRect(filterX, 0, w - filterX, h);
+
+            // Vẽ các đường luồng gió
+            ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+            ctx.lineWidth = 1;
+            for (let y = 30; y < h - 20; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(10, y);
+                ctx.lineTo(w - 10, y);
+                ctx.stroke();
+            }
+
+            // Vẽ Màng Lọc (Khe hở lưới thể hiện độ dày đặc)
+            ctx.save();
+            ctx.strokeStyle = isRight ? "#22d3ee" : "#fb7185";
+            ctx.lineWidth = isRight ? 4 : 3;
+            // Khe hở nét đứt: Cột phải siêu khít, cột trái thưa tùy theo mức chọn
+            let gap = 2;
+            if (!isRight) {
+                if (marketFilterSize >= 10) gap = 26;
+                else if (marketFilterSize >= 2.5) gap = 18;
+                else if (marketFilterSize >= 0.3) gap = 12;
+                else if (marketFilterSize >= 0.1) gap = 8;
+                else gap = 5;
+            }
+            ctx.setLineDash(isRight ? [3, 2] : [6, gap]);
+            ctx.beginPath();
+            ctx.moveTo(filterX, 15);
+            ctx.lineTo(filterX, h - 15);
+            ctx.stroke();
+            ctx.restore();
+
+            // Nhãn vùng
+            ctx.font = "600 10px Inter, sans-serif";
+            ctx.fillStyle = "#64748b";
+            ctx.fillText("KHÔNG KHÍ Ô NHIỄM", 14, 22);
+            ctx.fillStyle = isRight ? "#22d3ee" : "#fb7185";
+            ctx.fillText(isRight ? "KHÍ SẠCH TINH KHIẾT" : "VÙNG PHỔI HÍT PHẢI", filterX + 14, 22);
+        }
+
+        // ==========================================
+        // 5. LOGIC KÍNH HIỂN VI ZOOM ĐA TẦNG (1x - 1000x)
+        // ==========================================
+        const zoomSlider = document.getElementById('zoom-slider');
+        zoomSlider.addEventListener('input', (e) => {
+            zoomLevel = parseFloat(e.target.value);
+            document.getElementById('zoom-display').innerText = `${zoomLevel}x`;
+            updateMicroscopeCaption();
+        });
+
+        function setZoomPreset(val) {
+            zoomLevel = val;
+            zoomSlider.value = val;
+            document.getElementById('zoom-display').innerText = `${val}x`;
+            updateMicroscopeCaption();
+        }
+
+        function updateMicroscopeCaption() {
+            const cap = document.getElementById('microscope-caption');
+            if (zoomLevel < 10) {
+                cap.innerHTML = `<strong>Mức phóng đại ${zoomLevel}x:</strong> Bạn đang thấy tiết diện <strong>Sợi tóc (60 µm)</strong> khổng lồ bên trái và hạt <strong>PM10 (10 µm)</strong>. Ở tỷ lệ này, các hạt 0.3 µm hay 0.0024 µm nhỏ đến mức vô hình.`;
+            } else if (zoomLevel < 100) {
+                cap.innerHTML = `<strong>Mức phóng đại ${zoomLevel}x:</strong> Hạt <strong>PM2.5 (2.5 µm)</strong> hiện rõ như quả bóng, bên cạnh hạt <strong>0.3 µm (Chuẩn HEPA)</strong>. Hạt 0.0024 µm vẫn chỉ là một điểm chấm li ti chưa tới 1 pixel.`;
+            } else if (zoomLevel < 400) {
+                cap.innerHTML = `<strong>Mức phóng đại ${zoomLevel}x:</strong> Hạt <strong>0.3 µm</strong> đã phình to chiếm phần lớn khung hình, hạt <strong>0.03 µm</strong> hiện rõ như viên bi — và lúc này điểm sáng xanh <strong>0.0024 µm (2.4 nm)</strong> mới bắt đầu lộ diện!`;
+            } else {
+                cap.innerHTML = `<strong>Mức phóng đại cực đại ${zoomLevel}x:</strong> Ở độ phóng đại này, hạt 0.3 µm lớn vượt khỏi màn hình! Bạn đang nhìn trực diện tỷ lệ giữa ngưỡng <strong>0.03 µm</strong> và ngưỡng siêu vi <strong>0.0024 µm</strong> (nhỏ hơn 12,5 lần).`;
+            }
+        }
+
+        function drawMicroscope() {
+            const w = cMicro.width / window.devicePixelRatio;
+            const h = cMicro.height / window.devicePixelRatio;
+            ctxMicro.clearRect(0, 0, w, h);
+
+            // Lưới trắc địa kính hiển vi
+            ctxMicro.strokeStyle = "rgba(56, 189, 248, 0.07)";
+            ctxMicro.lineWidth = 1;
+            const gridSize = 40;
+            for (let x = 0; x < w; x += gridSize) {
+                ctxMicro.beginPath(); ctxMicro.moveTo(x, 0); ctxMicro.lineTo(x, h); ctxMicro.stroke();
+            }
+            for (let y = 0; y < h; y += gridSize) {
+                ctxMicro.beginPath(); ctxMicro.moveTo(0, y); ctxMicro.lineTo(w, y); ctxMicro.stroke();
+            }
+
+            // Quy đổi: Tại zoom = 1x, 1 micromet = 1.6 pixel
+            const pxPerMicron = 1.6 * zoomLevel;
+            const centerY = h * 0.56;
+
+            const items = [
+                { name: "Sợi tóc người", size: 60, color: "#475569", xRatio: 0.08 },
+                { name: "PM10 (10 µm)", size: 10, color: "#f59e0b", xRatio: 0.28 },
+                { name: "PM2.5 (2.5 µm)", size: 2.5, color: "#fb923c", xRatio: 0.45 },
+                { name: "HEPA 0.3 µm", size: 0.3, color: "#fde047", xRatio: 0.61 },
+                { name: "Virus 0.1 µm", size: 0.1, color: "#c084fc", xRatio: 0.74 },
+                { name: "0.03 µm", size: 0.03, color: "#fb7185", xRatio: 0.85 },
+                { name: "0.0024 µm", size: 0.0024, color: "#22d3ee", xRatio: 0.94 }
+            ];
+
+            items.forEach(item => {
+                const radius = (item.size * pxPerMicron) / 2;
+                const cx = w * item.xRatio;
+
+                // Vẽ hình tròn đúng tỷ lệ
+                ctxMicro.save();
+                ctxMicro.beginPath();
+                ctxMicro.arc(cx, centerY, Math.max(radius, 0.8), 0, Math.PI * 2);
+                ctxMicro.fillStyle = item.color;
+                if (item.size === 0.0024) {
+                    ctxMicro.shadowColor = "#22d3ee";
+                    ctxMicro.shadowBlur = 12;
+                }
+                ctxMicro.fill();
+
+                // Vẽ nhãn chỉ dẫn nếu vật thể không quá khổng lồ tràn hết màn hình
+                if (radius < h * 0.9) {
+                    ctxMicro.fillStyle = item.size === 0.0024 ? "#22d3ee" : "#cbd5e1";
+                    ctxMicro.font = item.size === 0.0024 ? "bold 11px JetBrains Mono, monospace" : "10px Inter, sans-serif";
+                    ctxMicro.textAlign = "center";
+                    const labelY = Math.min(centerY + radius + 18, h - 15);
+                    ctxMicro.fillText(item.name, cx, labelY);
+                }
+                ctxMicro.restore();
+            });
+        }
+
+        // ==========================================
+        // 6. LOGIC BẢNG QUY ĐỔI ẨN DỤ ĐỜI THƯỜNG
+        // ==========================================
+        function selectMetaphor(size) {
+            const data = metaphorData[size];
+            if (!data) return;
+
+            document.querySelectorAll('.meta-btn').forEach(btn => {
+                if (parseFloat(btn.dataset.m) === size) {
+                    btn.className = "meta-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-cyan-600 text-white border border-cyan-400 shadow-lg shadow-cyan-500/20";
+                } else {
+                    btn.className = "meta-btn px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700";
+                }
+            });
+
+            const ratio = Math.round((size / TARGET_SIZE) * 10) / 10;
+            const areaRatio = Math.round(ratio * ratio);
+
+            document.getElementById('stat-diameter').innerText = `${ratio.toLocaleString('vi-VN')} lần`;
+            document.getElementById('stat-area').innerText = `${areaRatio.toLocaleString('vi-VN')} lần`;
+            document.getElementById('metaphor-headline').innerText = data.headline;
+            document.getElementById('metaphor-desc').innerText = data.desc;
+
+            // Cập nhật hình tròn tỷ lệ
+            const marketCircle = document.getElementById('circle-market');
+            const targetCircle = document.getElementById('circle-0024');
+            marketCircle.innerText = `${size} µm`;
+            document.getElementById('label-circle-market').innerText = data.name;
+
+            // Đường kính vòng tròn lớn cố định 180px, vòng tròn 0.0024 thu nhỏ theo đúng tỷ lệ (tối thiểu 2px để mắt thấy)
+            const scaledTargetPx = Math.max(2, Math.round(180 / ratio));
+            targetCircle.style.width = `${scaledTargetPx}px`;
+            targetCircle.style.height = `${scaledTargetPx}px`;
+        }
+
+        // ==========================================
+        // 7. VÒNG LẶP ANIMATION CHÍNH (60 FPS)
+        // ==========================================
+        function loop() {
+            if (activeTab === 'chamber') {
+                drawChamberBackground(ctxLeft, cLeft, false);
+                drawChamberBackground(ctxRight, cRight, true);
+
+                leftParticles.forEach(p => { p.update(); p.draw(ctxLeft); });
+                rightParticles.forEach(p => { p.update(); p.draw(ctxRight); });
+            } else if (activeTab === 'microscope') {
+                drawMicroscope();
+            }
+            requestAnimationFrame(loop);
+        }
+
+        // Khởi chạy ban đầu
+        window.onload = function() {
+            resizeCanvases();
+            initChamberParticles();
+            selectMetaphor(0.3);
+            loop();
+        };
+    </script>
+</body>
+</html>
